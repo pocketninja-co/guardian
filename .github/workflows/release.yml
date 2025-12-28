@@ -12,7 +12,7 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  build:
+  build-macos:
     name: Build on macOS
     runs-on: macos-latest
     steps:
@@ -45,20 +45,77 @@ jobs:
       - name: Package Application
         run: |
           cd build/bin
-          zip -r Guardian.app.zip Guardian.app
+          zip -r Guardian-macOS.zip Guardian.app
 
-      - name: Upload Build Artifact
+      - name: Upload macOS Build
         uses: actions/upload-artifact@v4
         with:
           name: Guardian-macOS
-          path: build/bin/Guardian.app.zip
+          path: build/bin/Guardian-macOS.zip
 
+  build-windows:
+    name: Build on Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          check-latest: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Build Application
+        run: |
+          # Build for Windows
+          wails build -platform windows/amd64
+
+      - name: Package Application
+        run: |
+          cd build/bin
+          Compress-Archive -Path Guardian.exe -DestinationPath Guardian-Windows.zip
+
+      - name: Upload Windows Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Guardian-Windows
+          path: build/bin/Guardian-Windows.zip
+
+  release:
+    name: Create Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Guardian-macOS
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Guardian-Windows
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: build/bin/Guardian.app.zip
+          files: |
+            Guardian-macOS.zip
+            Guardian-Windows.zip
           generate_release_notes: true
           draft: false
           prerelease: false
