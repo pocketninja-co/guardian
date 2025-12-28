@@ -17,6 +17,10 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: write  # Required to create releases and tags
+  pull-requests: write  # Optional, for PR comments
+
 env:
   # Necessary for running git related commands in the build process
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
