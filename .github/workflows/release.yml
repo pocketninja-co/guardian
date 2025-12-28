@@ -53,8 +53,12 @@ jobs:
           name: Guardian-macOS
           path: build/bin/Guardian.app.zip
 
-      - name: Release
-        uses: softprops/action-gh-release@v1
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: build/bin/Guardian.app.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
