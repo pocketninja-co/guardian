@@ -3,9 +3,19 @@ name: Build and Release
 on:
   push:
     branches: [ "main" ]
-    tags: [ "v*" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:  # Allows manual triggering from GitHub UI
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.2.0)'
+        required: true
+        type: string
+      create_release:
+        description: 'Create GitHub Release'
+        required: true
+        type: boolean
+        default: true
 
 env:
   # Necessary for running git related commands in the build process
@@ -98,7 +108,7 @@ jobs:
     name: Create Release
     needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
     steps:
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
@@ -113,6 +123,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: Guardian ${{ github.event.inputs.version }}
           files: |
             Guardian-macOS.zip
             Guardian-Windows.zip
