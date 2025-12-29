@@ -56,10 +56,58 @@ jobs:
           # Build specifically for macOS
           wails build -platform darwin/universal
 
-      - name: Package Application
+      - name: Import Code Signing Certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          cd build/bin
-          zip -r Guardian-macOS.zip Guardian.app
+          # Create keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          
+          # Import certificate
+          echo "$CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          security import certificate.p12 -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          
+          # Allow codesign to use the keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+      - name: Install gon for notarization
+        run: |
+          brew install mitchellh/gon/gon
+
+      - name: Sign and Notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Update gon config with Apple ID and Team ID
+          cat > build/gon.json <<EOF
+          {
+            "source": ["./build/bin/Guardian.app"],
+            "bundle_id": "co.pocketninja.guardian",
+            "apple_id": {
+              "username": "$APPLE_ID",
+              "password": "@env:APPLE_APP_PASSWORD",
+              "provider": "$APPLE_TEAM_ID"
+            },
+            "sign": {
+              "application_identity": "Developer ID Application"
+            },
+            "zip": {
+              "output_path": "./build/bin/Guardian-macOS.zip"
+            }
+          }
+          EOF
+          
+          # Sign and notarize (this also creates the zip)
+          gon -log-level=info build/gon.json
 
       - name: Upload macOS Build
         uses: actions/upload-artifact@v4
